@@ -29,18 +29,29 @@ npm ci
 npm run types
 npm run check
 npx wrangler login
-cp .dev.vars.example .dev.vars
 ```
 
-Create a [Cloudflare API token](https://developers.cloudflare.com/radar/get-started/first-request/) with **Account → Radar → Read** and save it as `RADAR_API_TOKEN` in `.dev.vars`. That file is ignored by Git. Never commit real API keys.
+The deployed Worker keeps `RADAR_API_TOKEN` as an encrypted **Cloudflare Worker secret**. No local secret file or GitHub Actions secret is needed to build, test, or redeploy it. Tests use mocked credentials.
 
 Choose your Worker name in `wrangler.jsonc`. For accounts with access to multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID before deploying.
 
 ```sh
-npm run deploy -- --secrets-file .dev.vars
+npm run deploy
 ```
 
-Wrangler uploads the token as a Worker secret and prints the Worker URL. Subscribe at `https://<worker>.<subdomain>.workers.dev/feed.xml`.
+Wrangler preserves the existing secret on Cloudflare and prints the Worker URL. The config declares `RADAR_API_TOKEN` as required, so deployment fails if it is missing. Subscribe at `https://<worker>.<subdomain>.workers.dev/feed.xml`.
+
+### Initial secret setup or rotation
+
+Create a [Cloudflare API token](https://developers.cloudflare.com/radar/get-started/first-request/) with **Account → Radar → Read**. In the Cloudflare dashboard, select **Workers & Pages → your Worker → Settings → Variables and Secrets → Add**, choose **Secret**, enter `RADAR_API_TOKEN` and its value, then deploy the change. Do not put the value in this repository or a local file.
+
+Alternatively, install it with an interactive prompt:
+
+```sh
+npx wrangler secret put RADAR_API_TOKEN
+```
+
+The value is sent to Cloudflare without being written to a local secret file. `secret put` immediately deploys a new Worker version. This setup is only necessary for a new Worker or token rotation; regular code deploys reuse the installed secret. See [Cloudflare's secret management documentation](https://developers.cloudflare.com/workers/configuration/secrets/).
 
 ## Configuration
 

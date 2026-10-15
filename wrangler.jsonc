@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "radar-west-africa-rss",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-15",
+  "workers_dev": true,
+  "preview_urls": false,
+  "triggers": {
+    "crons": [
+      "*/15 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "secrets": {
+    "required": [
+      "RADAR_API_TOKEN"
+    ]
+  },
+  "vars": {
+    "COUNTRIES": "CI,SN,ML,BF,BJ",
+    "INTERVAL": "15m",
+    "SIGMA_MULTIPLIER": "4",
+    "MIN_DAILY_SWING_FRACTION": "0.15"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "MONITOR",
+        "class_name": "BotMonitor"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "BotMonitor"
+      ]
+    }
+  ]
+}

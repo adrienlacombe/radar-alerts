@@ -1,0 +1,67 @@
+# Radar Alerts
+
+A Cloudflare Worker that detects unusual upward bot traffic spikes and publishes a public RSS 2.0 feed for five West African countries.
+
+**Live feed:** https://radar-west-africa-rss.starknet-wallet-mig.workers.dev/feed.xml
+
+Countries: Côte d’Ivoire (`CI`), Sénégal (`SN`), Mali (`ML`), Burkina Faso (`BF`), and Bénin (`BJ`). Add the feed URL to any RSS reader. Each country has an independent baseline and alert state; one spike episode produces one feed item per country.
+
+## How it works
+
+Every 15 minutes, a Cron Trigger queries the [Cloudflare Radar HTTP time series API](https://developers.cloudflare.com/api/resources/radar/subresources/http/methods/timeseries/) for bot request volume. The detector compares each complete sample with the same time of day over the previous 14 days. All five countries have fixed UTC offsets, so matching UTC slots preserves local time of day.
+
+- Baseline: median of the historical same-time samples, with at least seven days required.
+- Robust variability: `sigma = 1.4826 × median absolute deviation`.
+- Spike threshold: `baseline + max(4 × sigma, 0.15 × historical swing, 0.05 × baseline, 1e-9)`.
+- Historical swing: 95th percentile minus 5th percentile of prior traffic.
+- Re-arming: two consecutive samples below a lower recovery threshold.
+
+Current and historical data are requested together with `MIN0_MAX` normalization, ensuring comparable values. These are normalized request volumes, not request counts or bot share percentages. A flagged anomaly is not proof of malicious activity.
+
+Each country uses a separate SQLite-backed Durable Object. Feed items and detector state are written atomically. Stable GUIDs prevent duplicate entries, including across restarts. The feed keeps up to 30 days and returns the newest 200 items across all countries.
+
+## Run and deploy
+
+Requires Node.js 22.18+ and a Cloudflare account.
+
+```sh
+npm ci
+npm run types
+npm run check
+npx wrangler login
+cp .dev.vars.example .dev.vars
+```
+
+Create a [Cloudflare API token](https://developers.cloudflare.com/radar/get-started/first-request/) with **Account → Radar → Read** and save it as `RADAR_API_TOKEN` in `.dev.vars`. That file is ignored by Git. Never commit real API keys.
+
+Choose your Worker name in `wrangler.jsonc`. For accounts with access to multiple Cloudflare accounts, set `CLOUDFLARE_ACCOUNT_ID` to the intended account ID before deploying.
+
+```sh
+npm run deploy -- --secrets-file .dev.vars
+```
+
+Wrangler uploads the token as a Worker secret and prints the Worker URL. Subscribe at `https://<worker>.<subdomain>.workers.dev/feed.xml`.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `COUNTRIES` | `CI,SN,ML,BF,BJ` | Country checks enabled |
+| `INTERVAL` | `15m` | Radar sample interval |
+| `SIGMA_MULTIPLIER` | `4` | Sensitivity to historical variability |
+| `MIN_DAILY_SWING_FRACTION` | `0.15` | Minimum deviation relative to historical traffic swing |
+| `RADAR_API_TOKEN` | Secret | Read access to Radar |
+
+The Cron Trigger runs every 15 minutes. Feed reads never trigger a Radar request or mutate detector state. The public routes `/`, `/feed.xml`, and `/rss.xml` serve RSS; GET and HEAD are supported, with ETags and a five-minute cache lifetime.
+
+## Validation
+
+`npm run check` runs the unit suite, TypeScript checks, a Wrangler dry run, and bundled Worker integration tests using isolated Miniflare SQLite storage. Runtime tests cover five independent spikes, deduplication, persistence after restart, read-only feed access, HTTP methods, and conditional requests, including weak ETags introduced by CDN compression. Test traffic is mocked and is never published to the live feed.
+
+## Operational limits
+
+The newest 30 minutes are excluded to avoid incomplete samples. Actual detection delay also includes Radar publication delay, observed at roughly one hour during initial setup. Missing samples remain missing; stale data and explicitly low confidence are rejected. Null confidence metadata is accepted as unassessed.
+
+First checks evaluate the latest eligible sample. Later checks catch up at most six hours, so longer outages can miss episodes. Errors are recorded in Cloudflare logs. Feed availability alone does not establish that scheduled checks are healthy.
+
+An empty feed is valid and means no spike entries have been published yet. RSS readers choose their own polling cadence. No email provider or Healthchecks account is required.

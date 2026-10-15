@@ -85,6 +85,17 @@ The public feed returned HTTP 200 with valid RSS, a `lastBuildDate` of `Thu, 15 
 
 The deployed JavaScript bundle matched the locally tested bundle byte for byte (SHA-256: `ccf74802969182e340b317fcfd635767637da9ea2e7495f921771730ad42395c`). All 22 unit tests and the bundled runtime integration tests passed, including publication of five simulated country spikes in isolated storage. A genuine production spike and its publication were **not observed** during this audit; no synthetic entries were inserted into the public feed.
 
+### New feed URL verification — 15 October 2026
+
+After renaming the account subdomain to `adrienlacombe.workers.dev`, the [new feed URL](https://radar-west-africa-rss.adrienlacombe.workers.dev/feed.xml) was successfully verified over HTTPS with certificate validation enabled:
+
+- GET returned **200 OK**, valid RSS 2.0, and `Content-Type: application/rss+xml; charset=utf-8`.
+- The RSS self link matched the new HTTPS feed URL.
+- HEAD returned **200 OK**; a conditional GET using the feed's ETag returned **304 Not Modified**.
+- The feed reported `lastBuildDate: Thu, 15 Oct 2026 09:30:21 GMT` (**11:30:21 Paris**) and zero published items.
+
+HTTPS initially failed during propagation after the rename, then became available. No Worker code change was required. The README's subscription links use the new URL.
+
 ## Operational limits
 
 The newest 30 minutes are excluded to avoid incomplete samples. Actual detection delay also includes Radar publication delay, observed at roughly one hour during initial setup. Missing samples remain missing; stale data and explicitly low confidence are rejected. Null confidence metadata is accepted as unassessed.

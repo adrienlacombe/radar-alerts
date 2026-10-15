@@ -2,7 +2,7 @@
 
 A Cloudflare Worker that detects unusual upward bot traffic spikes and publishes a public RSS 2.0 feed for five West African countries.
 
-**Live feed:** [Subscribe to Radar Alerts](https://radar-west-africa-rss.starknet-wallet-mig.workers.dev/feed.xml)
+**Live feed:** [Subscribe to Radar Alerts](https://radar-west-africa-rss.adrienlacombe.workers.dev/feed.xml)
 
 Countries: Côte d’Ivoire (`CI`), Sénégal (`SN`), Mali (`ML`), Burkina Faso (`BF`), and Bénin (`BJ`). Add the feed URL to any RSS reader. Each country has an independent baseline and alert state; one spike episode produces one feed item per country.
 
@@ -39,7 +39,7 @@ Choose your Worker name in `wrangler.jsonc`. For accounts with access to multipl
 npm run deploy
 ```
 
-Wrangler preserves the existing secret on Cloudflare and prints the Worker URL. The config declares `RADAR_API_TOKEN` as required, so deployment fails if it is missing. The current deployment's feed is [https://radar-west-africa-rss.starknet-wallet-mig.workers.dev/feed.xml](https://radar-west-africa-rss.starknet-wallet-mig.workers.dev/feed.xml). For your own deployment, append `/feed.xml` to the Worker URL printed by Wrangler.
+Wrangler preserves the existing secret on Cloudflare and prints the Worker URL. The config declares `RADAR_API_TOKEN` as required, so deployment fails if it is missing. The current deployment's feed is [https://radar-west-africa-rss.adrienlacombe.workers.dev/feed.xml](https://radar-west-africa-rss.adrienlacombe.workers.dev/feed.xml). For your own deployment, append `/feed.xml` to the Worker URL printed by Wrangler.
 
 ### Initial secret setup or rotation
 

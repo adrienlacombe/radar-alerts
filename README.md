@@ -14,7 +14,11 @@ Every 15 minutes, a Cron Trigger queries the [Cloudflare Radar HTTP time series 
 - Robust variability: `sigma = 1.4826 × median absolute deviation`.
 - Spike threshold: `baseline + max(4 × sigma, 0.15 × historical swing, 0.05 × baseline, 1e-9)`.
 - Historical swing: 95th percentile minus 5th percentile of prior traffic.
+- Marginal spikes: publish only after **two consecutive samples** exceed their respective spike thresholds. A missing sample or a sample below or equal to its threshold resets the pending count; repeated polls of the same sample do not count twice.
+- Large spikes: publish immediately when `value >= baseline + 2 × (threshold - baseline)`. This doubles the required rise above baseline, not the whole threshold or the traffic volume.
 - Re-arming: two consecutive samples below a lower recovery threshold.
+
+At the default 15-minute sample interval, persistence adds one sample (15 minutes) before a marginal episode can be confirmed, plus any Radar publication/polling delay. The feed timestamps a persistent alert with the confirming sample. Pending crossings survive Worker restarts; existing active episodes remain deduplicated when upgrading from the original detector.
 
 Current and historical data are requested together with `MIN0_MAX` normalization, ensuring comparable values. These are normalized request volumes, not request counts or bot share percentages. A flagged anomaly is not proof of malicious activity.
 
@@ -95,6 +99,22 @@ After renaming the account subdomain to `adrienlacombe.workers.dev`, the [new fe
 - The feed reported `lastBuildDate: Thu, 15 Oct 2026 09:30:21 GMT` (**11:30:21 Paris**) and zero published items.
 
 HTTPS initially failed during propagation after the rename, then became available. No Worker code change was required. The README's subscription links use the new URL.
+
+### Persistence replay — 16 October 2026
+
+`test/fixtures/radar-2026-10-16.json` contains the public Radar time series used to review the seven overnight alerts. `test/replay.test.ts` first reproduces all seven original alerts, then replays the same samples through the persistence rule. The result is three alerts:
+
+| Original sample (Paris time) | Country | New behavior |
+| --- | --- | --- |
+| 15 Oct 23:30 | Côte d’Ivoire | Immediate large-spike alert at 23:30 |
+| 15 Oct 23:30 | Burkina Faso | Confirmed by the next sample at 23:45 |
+| 16 Oct 04:15 | Bénin | Confirmed by the next sample at 04:30 |
+| 15 Oct 23:15 | Bénin | Suppressed: isolated marginal crossing |
+| 15 Oct 23:30 | Sénégal | Suppressed: isolated marginal crossing |
+| 16 Oct 01:30 | Côte d’Ivoire | Suppressed: isolated marginal crossing |
+| 16 Oct 05:45 | Bénin | Suppressed: isolated marginal crossing |
+
+This is a regression check on one reviewed night, not a measured general false-positive rate. The three retained episodes had stronger evidence in the daily-cycle review. Tests also cover gaps, duplicate samples, legacy state, re-arming, and persistence across an actual runtime restart. Previously published production RSS entries are retained; this rule applies to newly evaluated samples.
 
 ## Operational limits
 

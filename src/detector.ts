@@ -1,6 +1,7 @@
 export const DAY = 86_400_000;
 export type Point = { time: number; value: number };
-export type State = { lastTime: number; active: boolean; healthy: number };
+// Optional for compatibility with detector state written before persistence was added.
+export type State = { lastTime: number; active: boolean; healthy: number; crossings?: number };
 export const initialState = (): State => ({ lastTime: 0, active: false, healthy: 0 });
 
 export function quantile(values: number[], q: number): number {
@@ -23,8 +24,9 @@ export function score(points: Point[], point: Point, sigmaMultiplier = 4, swingF
   // Positive floors also handle flat or almost-zero series. MIN0_MAX is requested.
   const floor = Math.max(swingFraction * swing, 0.05 * baseline, 1e-9);
   const threshold = baseline + Math.max(sigmaMultiplier * sigma, floor);
+  const immediateThreshold = baseline + 2 * (threshold - baseline);
   const recoveryThreshold = baseline + Math.max(2 * sigma, floor / 2);
-  return { baseline, threshold, recoveryThreshold, samples: samples.length, value: point.value,
+  return { baseline, threshold, immediateThreshold, recoveryThreshold, samples: samples.length, value: point.value,
     time: point.time, spike: point.value > threshold };
 }
 
@@ -32,8 +34,11 @@ export function advance(state: State, result: ReturnType<typeof score>, step: nu
   if (result.time <= state.lastTime) return { state, alert: false };
   const contiguous = result.time - state.lastTime === step;
   const healthy = result.value <= result.recoveryThreshold ? (contiguous ? state.healthy : 0) + 1 : 0;
-  const alert = result.spike && !state.active;
-  return { alert, state: { lastTime: result.time, active: result.spike || (state.active && healthy < 2), healthy } };
+  const crossings = result.spike ? Math.min(2, (contiguous ? state.crossings ?? 0 : 0) + 1) : 0;
+  const immediate = result.spike && result.value >= result.immediateThreshold;
+  const alert = !state.active && (immediate || crossings >= 2);
+  const reason = alert ? (immediate ? "large_spike" : "persistent_spike") : undefined;
+  return { alert, reason, state: { lastTime: result.time, active: alert || (state.active && healthy < 2), healthy, crossings } };
 }
 
 function object(value: unknown): Record<string, unknown> {

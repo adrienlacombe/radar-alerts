@@ -60,6 +60,32 @@ try {
   const persisted = await (await mf.dispatchFetch("https://feed.example/feed.xml")).text();
   assert.equal((persisted.match(/<item>/g) ?? []).length, 5, "feed items must survive Worker restart");
   console.log("RSS runtime checks passed: five independent spikes, deduplication, persistence, read-only feed, ETag and routes.");
+  await mf.dispose();
+  let confirmMarginal = false;
+  const marginalPersist = join(persist, "marginal");
+  const marginalOptions = { ...options, durableObjectsPersist: marginalPersist, outboundService: async () => {
+    const sampleTimes = confirmMarginal ? timestamps : timestamps.slice(0, -1);
+    return Response.json({ success: true, result: {
+      meta: { normalization: "MIN0_MAX", aggInterval: "FIFTEEN_MINUTES", lastUpdated: new Date(now).toISOString(), confidenceInfo: { level: null } },
+      serie_0: { timestamps: sampleTimes, values: sampleTimes.map((_t, i) => i >= timestamps.length - 2 ? "0.32" : "0.3") },
+    } });
+  } };
+  const makeMarginal = () => new Miniflare({ ...convertV4MiniflareOptions(marginalOptions), resourcePersistencePath: marginalPersist });
+  mf = makeMarginal();
+  for (let i = 0; i < 2; i++) {
+    assert.equal((await (await mf.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome, "ok");
+    assert.equal(((await (await mf.dispatchFetch("https://feed.example/feed.xml")).text()).match(/<item>/g) ?? []).length, 0,
+      "one marginal sample, including a repeated poll, must not publish");
+  }
+  await mf.dispose();
+  confirmMarginal = true;
+  mf = makeMarginal();
+  assert.equal((await (await mf.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome, "ok");
+  const confirmed = await (await mf.dispatchFetch("https://feed.example/feed.xml")).text();
+  assert.equal((confirmed.match(/<item>/g) ?? []).length, 5, "pending crossings must survive restart and confirm independently");
+  assert.equal((await (await mf.getWorker()).scheduled({ cron: "*/15 * * * *" })).outcome, "ok");
+  assert.equal(((await (await mf.dispatchFetch("https://feed.example/feed.xml")).text()).match(/<item>/g) ?? []).length, 5);
+  console.log("Marginal runtime checks passed: one sample suppressed, duplicate polls ignored, restart preserves pending crossings, second sample publishes once per country.");
 } finally {
   await mf?.dispose();
   rmSync(persist, { recursive: true, force: true });

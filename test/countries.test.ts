@@ -20,7 +20,7 @@ test("simultaneous country spikes each alert, then suppress repeats independentl
   const states = new Map<CountryCode, State>();
   const alerts: CountryCode[] = [];
   const sample = { time: 900_000, value: 0.9, baseline: 0.3, threshold: 0.6,
-    recoveryThreshold: 0.4, samples: 14, spike: true };
+    immediateThreshold: 0.9, recoveryThreshold: 0.4, samples: 14, spike: true };
   const codes = configuredCountries("CI,SN,ML,BF,BJ");
   for (const time of [900_000, 1_800_000]) await checkCountries(codes, async code => {
     const next = advance(states.get(code) ?? initialState(), { ...sample, time }, 900_000);

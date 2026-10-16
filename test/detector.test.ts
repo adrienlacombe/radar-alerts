@@ -100,3 +100,45 @@ test("normalization, interval, invalid values and duplicate points rejected", ()
   const s = payload(); s.result.serie_0.timestamps[1] = s.result.serie_0.timestamps[0];
   assert.throws(() => parseRadar(s, now, step), /Duplicate/);
 });
+
+test("marginal crossings require two distinct contiguous samples", () => {
+  const points = history(), normal = score(points, points.at(-1)!);
+  const result = { ...normal, value: (normal.threshold + normal.immediateThreshold) / 2, spike: true };
+  const one = advance(initialState(), result, step);
+  assert.equal(one.alert, false);
+  assert.equal(one.state.active, false);
+  assert.equal(one.state.crossings, 1);
+  assert.equal(advance(one.state, result, step).alert, false, "duplicate sample cannot confirm");
+  const two = advance(JSON.parse(JSON.stringify(one.state)), { ...result, time: result.time + step }, step);
+  assert.equal(two.alert, true);
+  assert.equal(two.reason, "persistent_spike");
+  assert.equal(advance(two.state, { ...result, time: result.time + 2 * step }, step).alert, false);
+});
+test("gaps and non-crossings reset marginal persistence", () => {
+  const points = history(), normal = score(points, points.at(-1)!);
+  const result = { ...normal, value: (normal.threshold + normal.immediateThreshold) / 2, spike: true };
+  const one = advance(initialState(), result, step);
+  const gap = advance(one.state, { ...result, time: result.time + 2 * step }, step);
+  assert.equal(gap.alert, false);
+  assert.equal(gap.state.crossings, 1);
+  const below = advance(one.state, { ...normal, time: result.time + step }, step);
+  assert.equal(below.state.crossings, 0);
+  assert.equal(advance(below.state, { ...result, time: result.time + 2 * step }, step).alert, false);
+});
+test("large spike alerts immediately at twice the threshold excess", () => {
+  const points = history(), normal = score(points, points.at(-1)!);
+  const result = { ...normal, value: normal.immediateThreshold, spike: true };
+  const next = advance(initialState(), result, step);
+  assert.equal(next.alert, true);
+  assert.equal(next.reason, "large_spike");
+});
+test("legacy persisted state starts with no pending marginal crossing", () => {
+  const points = history(), normal = score(points, points.at(-1)!);
+  const result = { ...normal, value: (normal.threshold + normal.immediateThreshold) / 2, spike: true };
+  const next = advance({ lastTime: result.time - step, active: false, healthy: 0 }, result, step);
+  assert.equal(next.alert, false);
+  assert.equal(next.state.crossings, 1);
+  const active = advance({ lastTime: result.time - step, active: true, healthy: 0 }, result, step);
+  assert.equal(active.alert, false);
+  assert.equal(active.state.active, true, "existing active episodes remain deduplicated");
+});

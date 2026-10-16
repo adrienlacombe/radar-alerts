@@ -65,7 +65,8 @@ export class BotMonitor extends DurableObject<Env> {
             JSON.stringify(next.state), now);
         });
         state = next.state;
-        console.log(JSON.stringify({ event: "evaluated", country, ...result, active: state.active, published: next.alert }));
+        console.log(JSON.stringify({ event: "evaluated", country, ...result, active: state.active,
+          crossings: state.crossings, published: next.alert, alertReason: next.reason }));
       }
       this.ctx.storage.sql.exec("INSERT INTO rss_state(id,state,checked) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET checked=excluded.checked", JSON.stringify(state), now);
       this.ctx.storage.sql.exec("DELETE FROM rss_items WHERE time < ? OR id NOT IN (SELECT id FROM rss_items ORDER BY time DESC LIMIT 200)", now - 30 * DAY);
